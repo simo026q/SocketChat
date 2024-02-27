@@ -6,7 +6,8 @@ using System.Text.Json;
 
 namespace SocketChat.Server;
 
-internal class SocketServer
+internal class SocketServer 
+    : IHostedService
 {
     private CancellationTokenSource? _cts;
 
@@ -15,36 +16,28 @@ internal class SocketServer
     private readonly ConcurrentDictionary<string, List<string>> _subscribedConnections = new();
     private readonly ConcurrentDictionary<string, SocketConnection> _connections = new();
 
-    public SocketServer(IPEndPoint endPoint)
+    public SocketServer()
     {
-        _socket = new Socket(endPoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
-        _socket.Bind(endPoint);
+        _socket = new Socket(SocketType.Stream, ProtocolType.Tcp);
     }
 
-    public SocketServer(IPAddress address, int port)
-        : this(new IPEndPoint(address, port))
-    {
-    }
-
-    public static async Task<SocketServer> CreateAsync(int port)
+    public async Task StartAsync(CancellationToken cancellationToken)
     {
         var ipAddress = await DnsTools.GetLocalIpAddressAsync();
-        return new(ipAddress, port);
-    }
+        var endpoint = new IPEndPoint(ipAddress, 11000);
+        _socket.Bind(endpoint);
 
-    public void Start()
-    {
         _socket.Listen(100);
 
-        _cts = new CancellationTokenSource();
-        var cancellationToken = _cts.Token;
+        _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         Task.Run(() => Run(cancellationToken), cancellationToken);
     }
 
-    public void Stop()
+    public Task StopAsync(CancellationToken cancellationToken)
     {
         _cts?.Cancel();
         _socket.Close();
+        return Task.CompletedTask;
     }
 
     private async Task Run(CancellationToken cancellationToken)
@@ -87,14 +80,14 @@ internal class SocketServer
             {
                 string messageBodyJson = message.Replace(SocketConstants.Message, "").Trim();
 
-                Message? messageBody = null;
+                Message? messageBody;
                 try
                 {
                     messageBody = JsonSerializer.Deserialize<Message>(messageBodyJson);
                 }
                 catch (JsonException)
                 {
-                    // ignore
+                    messageBody = null;
                 }
 
                 if (messageBody == null)
