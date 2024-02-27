@@ -9,13 +9,15 @@ namespace SocketChat.Server;
 internal class SocketServer 
     : BackgroundService
 {
+    private readonly ILogger<SocketServer> _logger;
     private readonly Socket _socket;
 
     private readonly ConcurrentDictionary<string, List<string>> _subscribedConnections = new();
     private readonly ConcurrentDictionary<string, SocketConnection> _connections = new();
 
-    public SocketServer()
+    public SocketServer(ILogger<SocketServer> logger)
     {
+        _logger = logger;
         _socket = new Socket(SocketType.Stream, ProtocolType.Tcp);
     }
 
@@ -23,6 +25,8 @@ internal class SocketServer
     {
         var ipAddress = await DnsTools.GetLocalIpAddressAsync();
         var endpoint = new IPEndPoint(ipAddress, 11000);
+
+        _logger.LogInformation("Starting server on {endpoint}", endpoint.ToString());
         _socket.Bind(endpoint);
         _socket.Listen(100);
 
@@ -34,6 +38,8 @@ internal class SocketServer
         while (!stoppingToken.IsCancellationRequested)
         {
             Socket handler = await _socket.AcceptAsync(stoppingToken);
+            _logger.LogInformation("Client connected from {endpoint}", handler.RemoteEndPoint?.ToString());
+
             SocketConnection connection = new(handler);
             _connections.TryAdd(connection.Id, connection);
             Task.Run(() => HandleConnection(connection, stoppingToken), stoppingToken);
@@ -44,9 +50,12 @@ internal class SocketServer
     {
         while (!cancellationToken.IsCancellationRequested)
         {
+            _logger.LogInformation("Waiting for message from {endpoint}", connection.Id);
             string? message = await connection.ReceiveAsync(cancellationToken);
             if (message == null)
                 break;
+
+            _logger.LogInformation("Received message from {endpoint}: {message}", connection.Id, message);
 
             if (message.StartsWith(SocketConstants.Subscribe))
             {
