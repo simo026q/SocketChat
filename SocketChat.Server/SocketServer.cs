@@ -86,7 +86,16 @@ internal class SocketServer
             else if (message.StartsWith(SocketConstants.Message))
             {
                 string messageBodyJson = message.Replace(SocketConstants.Message, "").Trim();
-                Message? messageBody = JsonSerializer.Deserialize<Message>(messageBodyJson);
+
+                Message? messageBody = null;
+                try
+                {
+                    messageBody = JsonSerializer.Deserialize<Message>(messageBodyJson);
+                }
+                catch (JsonException)
+                {
+                    // ignore
+                }
 
                 if (messageBody == null)
                     continue;
