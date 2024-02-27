@@ -1,18 +1,57 @@
 ﻿using SocketChat.Common;
+using System.Diagnostics;
 using System.Net.Sockets;
 using System.Text;
 
 namespace SocketChat.Server;
 
-public class SocketConnection(Socket socket) 
-    : IDisposable
+internal class SocketConnection : IDisposable
 {
-    public string Id { get; } = socket.RemoteEndPoint?.ToString() ?? Guid.NewGuid().ToString();
+    private readonly Socket _socket;
+    private readonly IMessageHandler _messageHandler;
+    private readonly CancellationToken _cancellationToken;
 
+    private bool _disposed = false;
+
+    public string Id { get; }
     public bool IsConnected => _socket.Connected;
 
-    private readonly Socket _socket = socket;
-    private bool _disposed = false;
+    public SocketConnection(Socket socket, IMessageHandler messageHandler, CancellationToken cancellationToken)
+    {
+        Id = socket.RemoteEndPoint?.ToString() ?? Guid.NewGuid().ToString();
+        _messageHandler = messageHandler;
+        _socket = socket;
+        _cancellationToken = cancellationToken;
+    }
+
+    private CancellationTokenSource? _receiveLoopCancellationTokenSource;
+
+    public void StartReceiveLoop()
+    {
+        _receiveLoopCancellationTokenSource?.Cancel();
+        _receiveLoopCancellationTokenSource = new CancellationTokenSource();
+        Task.Run(() => WaitForReceiveAsync(_receiveLoopCancellationTokenSource.Token));
+    }
+
+    private async Task WaitForReceiveAsync(CancellationToken loopCancellationToken)
+    {
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(loopCancellationToken, _cancellationToken);
+
+        try
+        {
+            while (!cts.Token.IsCancellationRequested)
+            {
+                string? message = await ReceiveAsync(stopLoop: false, cts.Token);
+                await _messageHandler.HandleMessageAsync(this, message);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // ignore
+        }
+
+        Debug.WriteLine("test");
+    }
 
     public async Task<bool> SendAsync(string message, CancellationToken cancellationToken = default)
     {
@@ -21,7 +60,7 @@ public class SocketConnection(Socket socket)
         try
         {
             await SendWithoutAcknowledgmentAsync(message, cancellationToken);
-            var response = await ReceiveWithoutAcknowledgmentAsync(cancellationToken);
+            var response = await ReceiveWithoutAcknowledgmentAsync(stopLoop: true, cancellationToken);
             return response == SocketConstants.Acknowledgment;
         }
         catch (SocketException)
@@ -34,7 +73,12 @@ public class SocketConnection(Socket socket)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        string? response = await ReceiveWithoutAcknowledgmentAsync(cancellationToken);
+        return await ReceiveAsync(stopLoop: true, cancellationToken);
+    }
+
+    private async Task<string?> ReceiveAsync(bool stopLoop, CancellationToken cancellationToken = default)
+    {
+        string? response = await ReceiveWithoutAcknowledgmentAsync(stopLoop, cancellationToken);
 
         if (response == null)
             return null;
@@ -61,8 +105,16 @@ public class SocketConnection(Socket socket)
         await _socket.SendAsync(messageBytes, SocketFlags.None, cancellationToken);
     }
 
-    private async Task<string?> ReceiveWithoutAcknowledgmentAsync(CancellationToken cancellationToken = default)
+    private async Task<string?> ReceiveWithoutAcknowledgmentAsync(bool stopLoop, CancellationToken cancellationToken = default)
     {
+        if (stopLoop)
+        {
+            _receiveLoopCancellationTokenSource?.Cancel();
+            _receiveLoopCancellationTokenSource = null;
+        }
+
+        string? response = null;
+
         var sb = new StringBuilder();
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -86,13 +138,14 @@ public class SocketConnection(Socket socket)
             {
                 message = message.Replace(SocketConstants.EndOfMessage, "");
                 sb.Append(message);
-                var value = sb.ToString();
+                response = sb.ToString();
                 sb.Clear();
-                return value;
+                break;
             }
             else if (message == SocketConstants.Acknowledgment)
             {
-                return SocketConstants.Acknowledgment;
+                response = SocketConstants.Acknowledgment;
+                break;
             }
             else
             {
@@ -100,7 +153,12 @@ public class SocketConnection(Socket socket)
             }
         }
 
-        return null;
+        if (response != null && stopLoop)
+        {
+            StartReceiveLoop();
+        }
+
+        return response;
     }
 
     public void Dispose()
@@ -119,6 +177,9 @@ public class SocketConnection(Socket socket)
             _socket.Shutdown(SocketShutdown.Both);
             _socket.Close();
             _socket.Dispose();
+
+            _receiveLoopCancellationTokenSource?.Cancel();
+            _receiveLoopCancellationTokenSource = null;
         }
 
         _disposed = true;

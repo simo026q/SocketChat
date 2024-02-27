@@ -7,7 +7,7 @@ using System.Text.Json;
 namespace SocketChat.Server;
 
 internal class SocketServer 
-    : BackgroundService
+    : BackgroundService, IMessageHandler
 {
     private readonly ILogger<SocketServer> _logger;
     private readonly Socket _socket;
@@ -41,79 +41,77 @@ internal class SocketServer
             Socket handler = await _socket.AcceptAsync(stoppingToken);
             _logger.LogInformation("Client connected from {endpoint}", handler.RemoteEndPoint?.ToString());
 
-            SocketConnection connection = new(handler);
+            SocketConnection connection = new(handler, this, stoppingToken);
             _connections.TryAdd(connection.Id, connection);
+            connection.StartReceiveLoop();
 
-            ThreadPool.QueueUserWorkItem(async _ => await HandleConnection(connection, stoppingToken));
+            //ThreadPool.QueueUserWorkItem(async _ => await HandleConnection(connection, stoppingToken));
         }
     }
 
-    private async Task HandleConnection(SocketConnection connection, CancellationToken cancellationToken)
+    public async Task HandleMessageAsync(SocketConnection connection, string? message)
     {
-        while (!cancellationToken.IsCancellationRequested)
+        if (message == null)
         {
-            _logger.LogInformation("Waiting for message from {endpoint}", connection.Id);
-            string? message = await connection.ReceiveAsync(cancellationToken);
-            if (message == null)
-                break;
+            connection.Dispose();
+            _connections.TryRemove(connection.Id, out _);
+            _subscribedConnections.TryRemove(connection.Id, out _);
+            _logger.LogInformation("Client {endpoint} disconnected", connection.Id);
+            return;
+        }
 
-            _logger.LogInformation("Received message from {endpoint}: {message}", connection.Id, message);
+        _logger.LogInformation("Received message from {endpoint}: {message}", connection.Id, message);
 
-            if (message.StartsWith(SocketConstants.Subscribe))
+        if (message.StartsWith(SocketConstants.Subscribe))
+        {
+            var roomId = message.Replace(SocketConstants.Subscribe, "").Trim();
+            _subscribedConnections.AddOrUpdate(connection.Id, [roomId], (connectionId, roomIds) =>
             {
-                var roomId = message.Replace(SocketConstants.Subscribe, "").Trim();
-                _subscribedConnections.AddOrUpdate(connection.Id, [roomId], (connectionId, roomIds) =>
-                {
-                    roomIds.Add(roomId);
-                    return roomIds;
-                });
+                roomIds.Add(roomId);
+                return roomIds;
+            });
+        }
+        else if (message.StartsWith(SocketConstants.Unsubscribe))
+        {
+            var roomId = message.Replace(SocketConstants.Unsubscribe, "").Trim();
+            if (_subscribedConnections.TryGetValue(connection.Id, out List<string>? roomIds))
+            {
+                roomIds.Remove(roomId);
             }
-            else if (message.StartsWith(SocketConstants.Unsubscribe))
-            {
-                var roomId = message.Replace(SocketConstants.Unsubscribe, "").Trim();
-                if (_subscribedConnections.TryGetValue(connection.Id, out List<string>? roomIds))
-                {
-                    roomIds.Remove(roomId);
-                }
-            }
-            else if (message.StartsWith(SocketConstants.Message))
-            {
-                string messageBodyJson = message.Replace(SocketConstants.Message, "").Trim();
+        }
+        else if (message.StartsWith(SocketConstants.Message))
+        {
+            string messageBodyJson = message.Replace(SocketConstants.Message, "").Trim();
 
-                Message? messageBody;
-                try
-                {
-                    messageBody = JsonSerializer.Deserialize<Message>(messageBodyJson);
-                }
-                catch (JsonException)
-                {
-                    messageBody = null;
-                }
-
+            Message? messageBody;
+            try
+            {
+                messageBody = JsonSerializer.Deserialize<Message>(messageBodyJson);
                 if (messageBody == null)
-                    continue;
+                    return;
+            }
+            catch (JsonException)
+            {
+                return;
+            }
 
-                foreach (var (connectionId, connection2) in _connections)
+            foreach (var (connectionId, connection2) in _connections)
+            {
+                if (connection != connection2
+                    && _subscribedConnections.TryGetValue(connectionId, out List<string>? subscribedRoomIds)
+                    && subscribedRoomIds.Contains(messageBody.RoomId))
                 {
-                    if (_subscribedConnections.TryGetValue(connectionId, out List<string>? subscribedRoomIds)
-                        && subscribedRoomIds.Contains(messageBody.RoomId))
+                    bool succeeded = await connection2.SendAsync(message);
+                    if (!succeeded)
                     {
-                        bool succeeded = await connection2.SendAsync(message, cancellationToken);
-                        if (!succeeded)
-                        {
-                            _logger.LogWarning("Failed to send message to {endpoint}", connection2.Id);
-                        }
-                        else
-                        {
-                            _logger.LogInformation("Sent message to {endpoint}", connection2.Id);
-                        }
+                        _logger.LogWarning("Failed to send message to {endpoint}", connection2.Id);
+                    }
+                    else
+                    {
+                        _logger.LogInformation("Sent message to {endpoint}", connection2.Id);
                     }
                 }
             }
         }
-
-        _connections.TryRemove(connection.Id, out _);
-        _subscribedConnections.TryRemove(connection.Id, out _);
-        _logger.LogInformation("Client {endpoint} disconnected", connection.Id);
     }
 }
