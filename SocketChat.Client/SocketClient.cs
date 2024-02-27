@@ -20,10 +20,10 @@ class SocketClient
     {
         await _socket.ConnectAsync(_endPoint);
         Console.WriteLine("Connected to the server.");
-        Task.Run(ReceiveMessages);
+        Task.Run(ReceiveMessagesAsync);
     }
 
-    private async void ReceiveMessages()
+    private async Task ReceiveMessagesAsync()
     {
         try
         {
@@ -35,6 +35,7 @@ class SocketClient
                 {
                     var message = Encoding.UTF8.GetString(buffer, 0, length);
                     Console.WriteLine($"Message from server: {message}");
+                    await SendRawAsync(SocketConstants.Acknowledgment);
                 }
             }
         }
@@ -46,9 +47,14 @@ class SocketClient
 
     public async Task SendAsync(string message)
     {
-        var encoded = Encoding.UTF8.GetBytes($"{message}{SocketConstants.EndOfMessage}");
+        await SendRawAsync($"{message}{SocketConstants.EndOfMessage}");
+    }
+
+    private async Task SendRawAsync(string message)
+    {
+        var encoded = Encoding.UTF8.GetBytes(message);
         await _socket.SendAsync(encoded, SocketFlags.None);
-        Console.WriteLine("Message sent to the server.");
+        Console.WriteLine($"Message sent to the server: '{message}'");
     }
 
     public void Close()
