@@ -2,6 +2,7 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
+using System.Text.Json;
 
 namespace SocketChat.Server;
 
@@ -11,7 +12,7 @@ internal class SocketServer
 
     private readonly Socket _socket;
 
-    private readonly ConcurrentDictionary<string, List<string>> _subscripedConnections = new();
+    private readonly ConcurrentDictionary<string, List<string>> _subscribedConnections = new();
     private readonly ConcurrentDictionary<string, SocketConnection> _connections = new();
 
     public SocketServer(IPEndPoint endPoint)
@@ -68,7 +69,7 @@ internal class SocketServer
             if (message.StartsWith(SocketConstants.Subscribe))
             {
                 var roomId = message.Replace(SocketConstants.Subscribe, "").Trim();
-                _subscripedConnections.AddOrUpdate(connection.Id, [roomId], (connectionId, roomIds) =>
+                _subscribedConnections.AddOrUpdate(connection.Id, [roomId], (connectionId, roomIds) =>
                 {
                     roomIds.Add(roomId);
                     return roomIds;
@@ -77,14 +78,33 @@ internal class SocketServer
             else if (message.StartsWith(SocketConstants.Unsubscribe))
             {
                 var roomId = message.Replace(SocketConstants.Unsubscribe, "").Trim();
-                if (_subscripedConnections.TryGetValue(connection.Id, out List<string>? roomIds))
+                if (_subscribedConnections.TryGetValue(connection.Id, out List<string>? roomIds))
                 {
                     roomIds.Remove(roomId);
                 }
             }
             else if (message.StartsWith(SocketConstants.Message))
             {
-                // TODO: Send message to all subscribers
+                string messageBodyJson = message.Replace(SocketConstants.Message, "").Trim();
+                Message? messageBody = JsonSerializer.Deserialize<Message>(messageBodyJson);
+
+                if (messageBody == null)
+                    continue;
+
+                if (_subscribedConnections.TryGetValue(connection.Id, out List<string>? roomIds))
+                {
+                    foreach (var roomId in roomIds)
+                    {
+                        foreach (var (connectionId, connection2) in _connections)
+                        {
+                            if (_subscribedConnections.TryGetValue(connectionId, out List<string>? subscribedRoomIds) 
+                                && subscribedRoomIds.Contains(roomId))
+                            {
+                                await connection2.SendAsync(message, cancellationToken);
+                            }
+                        }
+                    }
+                }
             }
         }
     }
