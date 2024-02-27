@@ -2,9 +2,9 @@
 
 public class Message
 {
-    public string RoomId;
-    public string Name;
-    public string Messsage;
-    public int MessageId;
-    public DateTime CreatedAt;
+    public string RoomId { get; set; }
+    public string Name { get; set; }
+    public string Messsage { get; set; }
+    public int MessageId { get; set; }
+    public DateTime CreatedAt { get; set; }
 }
