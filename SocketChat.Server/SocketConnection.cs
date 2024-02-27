@@ -30,13 +30,18 @@ public class SocketConnection(Socket socket)
         if (response == null)
             return null;
 
-        await SendWithoutAcknowledgmentAsync(SocketConstants.Acknowledgment, cancellationToken);
+        await SendRawWithoutAcknowledgmentAsync(SocketConstants.Acknowledgment, cancellationToken);
         return response;
     }
 
     private async Task SendWithoutAcknowledgmentAsync(string message, CancellationToken cancellationToken = default)
     {
-        var messageBytes = Encoding.UTF8.GetBytes(message + SocketConstants.EndOfMessage);
+        await SendRawWithoutAcknowledgmentAsync(message + SocketConstants.EndOfMessage, cancellationToken);
+    }
+
+    private async Task SendRawWithoutAcknowledgmentAsync(string message, CancellationToken cancellationToken = default)
+    {
+        var messageBytes = Encoding.UTF8.GetBytes(message);
         await _socket.SendAsync(messageBytes, SocketFlags.None, cancellationToken);
     }
 
@@ -56,7 +61,9 @@ public class SocketConnection(Socket socket)
             {
                 message = message.Replace(SocketConstants.EndOfMessage, "");
                 sb.Append(message);
-                return sb.ToString();
+                var value = sb.ToString();
+                sb.Clear();
+                return value;
             }
             else
             {
