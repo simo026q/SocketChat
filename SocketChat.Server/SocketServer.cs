@@ -7,10 +7,8 @@ using System.Text.Json;
 namespace SocketChat.Server;
 
 internal class SocketServer 
-    : IHostedService
+    : BackgroundService
 {
-    private CancellationTokenSource? _cts;
-
     private readonly Socket _socket;
 
     private readonly ConcurrentDictionary<string, List<string>> _subscribedConnections = new();
@@ -21,33 +19,24 @@ internal class SocketServer
         _socket = new Socket(SocketType.Stream, ProtocolType.Tcp);
     }
 
-    public async Task StartAsync(CancellationToken cancellationToken)
+    public override async Task StartAsync(CancellationToken cancellationToken)
     {
         var ipAddress = await DnsTools.GetLocalIpAddressAsync();
         var endpoint = new IPEndPoint(ipAddress, 11000);
         _socket.Bind(endpoint);
-
         _socket.Listen(100);
 
-        _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        Task.Run(() => Run(cancellationToken), cancellationToken);
+        await base.StartAsync(cancellationToken);
     }
 
-    public Task StopAsync(CancellationToken cancellationToken)
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _cts?.Cancel();
-        _socket.Close();
-        return Task.CompletedTask;
-    }
-
-    private async Task Run(CancellationToken cancellationToken)
-    {
-        while (!cancellationToken.IsCancellationRequested)
+        while (!stoppingToken.IsCancellationRequested)
         {
-            Socket handler = await _socket.AcceptAsync(cancellationToken);
+            Socket handler = await _socket.AcceptAsync(stoppingToken);
             SocketConnection connection = new(handler);
             _connections.TryAdd(connection.Id, connection);
-            Task.Run(() => HandleConnection(connection, cancellationToken), cancellationToken);
+            Task.Run(() => HandleConnection(connection, stoppingToken), stoppingToken);
         }
     }
 
@@ -93,18 +82,12 @@ internal class SocketServer
                 if (messageBody == null)
                     continue;
 
-                if (_subscribedConnections.TryGetValue(connection.Id, out List<string>? roomIds))
+                foreach (var (connectionId, connection2) in _connections)
                 {
-                    foreach (var roomId in roomIds)
+                    if (_subscribedConnections.TryGetValue(connectionId, out List<string>? subscribedRoomIds)
+                        && subscribedRoomIds.Contains(messageBody.RoomId))
                     {
-                        foreach (var (connectionId, connection2) in _connections)
-                        {
-                            if (_subscribedConnections.TryGetValue(connectionId, out List<string>? subscribedRoomIds) 
-                                && subscribedRoomIds.Contains(roomId))
-                            {
-                                await connection2.SendAsync(message, cancellationToken);
-                            }
-                        }
+                        await connection2.SendAsync(message, cancellationToken);
                     }
                 }
             }
