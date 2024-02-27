@@ -44,8 +44,7 @@ internal class SocketServer
             SocketConnection connection = new(handler);
             _connections.TryAdd(connection.Id, connection);
 
-            Task.Factory.StartNew(() => HandleConnection(connection, stoppingToken), 
-                stoppingToken, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+            ThreadPool.QueueUserWorkItem(async _ => await HandleConnection(connection, stoppingToken));
         }
     }
 
@@ -99,10 +98,22 @@ internal class SocketServer
                     if (_subscribedConnections.TryGetValue(connectionId, out List<string>? subscribedRoomIds)
                         && subscribedRoomIds.Contains(messageBody.RoomId))
                     {
-                        await connection2.SendAsync(message, cancellationToken);
+                        bool succeeded = await connection2.SendAsync(message, cancellationToken);
+                        if (!succeeded)
+                        {
+                            _logger.LogWarning("Failed to send message to {endpoint}", connection2.Id);
+                        }
+                        else
+                        {
+                            _logger.LogInformation("Sent message to {endpoint}", connection2.Id);
+                        }
                     }
                 }
             }
         }
+
+        _connections.TryRemove(connection.Id, out _);
+        _subscribedConnections.TryRemove(connection.Id, out _);
+        _logger.LogInformation("Client {endpoint} disconnected", connection.Id);
     }
 }
