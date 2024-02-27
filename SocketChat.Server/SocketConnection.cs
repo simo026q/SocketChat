@@ -9,6 +9,8 @@ public class SocketConnection(Socket socket)
 {
     public string Id { get; } = socket.RemoteEndPoint?.ToString() ?? Guid.NewGuid().ToString();
 
+    public bool IsConnected => _socket.Connected;
+
     private readonly Socket _socket = socket;
     private bool _disposed = false;
 
@@ -16,9 +18,16 @@ public class SocketConnection(Socket socket)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        await SendWithoutAcknowledgmentAsync(message, cancellationToken);
-        var response = await ReceiveWithoutAcknowledgmentAsync(cancellationToken);
-        return response == SocketConstants.Acknowledgment;
+        try
+        {
+            await SendWithoutAcknowledgmentAsync(message, cancellationToken);
+            var response = await ReceiveWithoutAcknowledgmentAsync(cancellationToken);
+            return response == SocketConstants.Acknowledgment;
+        }
+        catch (SocketException)
+        {
+            return false;
+        }
     }
 
     public async Task<string?> ReceiveAsync(CancellationToken cancellationToken = default)
@@ -30,8 +39,15 @@ public class SocketConnection(Socket socket)
         if (response == null)
             return null;
 
-        await SendRawWithoutAcknowledgmentAsync(SocketConstants.Acknowledgment, cancellationToken);
-        return response;
+        try
+        {
+            await SendRawWithoutAcknowledgmentAsync(SocketConstants.Acknowledgment, cancellationToken);
+            return response;
+        }
+        catch(SocketException)
+        {
+            return null;
+        }
     }
 
     private async Task SendWithoutAcknowledgmentAsync(string message, CancellationToken cancellationToken = default)
@@ -51,11 +67,20 @@ public class SocketConnection(Socket socket)
         while (!cancellationToken.IsCancellationRequested)
         {
             var buffer = new byte[SocketConstants.BufferSize];
-            var received = await _socket.ReceiveAsync(buffer, SocketFlags.None, cancellationToken);
-            if (received == 0)
-                break;
 
-            string message = Encoding.UTF8.GetString(buffer, 0, received);
+            string message;
+            try
+            {
+                var received = await _socket.ReceiveAsync(buffer, SocketFlags.None, cancellationToken);
+                if (received == 0)
+                    break;
+
+                message = Encoding.UTF8.GetString(buffer, 0, received);
+            }
+            catch (SocketException)
+            {
+                break;
+            }
 
             if (message.IndexOf(SocketConstants.EndOfMessage) > -1)
             {
