@@ -34,8 +34,12 @@ class SocketClient
                 if (length > 0)
                 {
                     var message = Encoding.UTF8.GetString(buffer, 0, length);
-                    Console.WriteLine($"Message from server: {message}");
-                    await SendRawAsync(SocketConstants.Acknowledgment);
+
+                    if (message != SocketConstants.Acknowledgment)
+                    {
+                        Console.WriteLine($"Message from server: {message}");
+                        await SendRawAsync(SocketConstants.Acknowledgment);
+                    }
                 }
             }
         }

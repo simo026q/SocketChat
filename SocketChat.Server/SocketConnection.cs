@@ -65,6 +65,10 @@ public class SocketConnection(Socket socket)
                 sb.Clear();
                 return value;
             }
+            else if (message == SocketConstants.Acknowledgment)
+            {
+                return SocketConstants.Acknowledgment;
+            }
             else
             {
                 sb.Append(message);

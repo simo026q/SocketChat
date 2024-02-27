@@ -37,12 +37,15 @@ internal class SocketServer
     {
         while (!stoppingToken.IsCancellationRequested)
         {
+            _logger.LogInformation("Ready for client connection...");
             Socket handler = await _socket.AcceptAsync(stoppingToken);
             _logger.LogInformation("Client connected from {endpoint}", handler.RemoteEndPoint?.ToString());
 
             SocketConnection connection = new(handler);
             _connections.TryAdd(connection.Id, connection);
-            Task.Run(() => HandleConnection(connection, stoppingToken), stoppingToken);
+
+            Task.Factory.StartNew(() => HandleConnection(connection, stoppingToken), 
+                stoppingToken, TaskCreationOptions.LongRunning, TaskScheduler.Default);
         }
     }
 
