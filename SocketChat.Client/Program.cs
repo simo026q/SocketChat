@@ -1,9 +1,14 @@
 ﻿using System.Net;
 
-var client = new SocketClient(IPAddress.Parse("192.168.0.157"), 11000); // Adjust port as necessary
+Console.WriteLine("Enter IP address for the server:");
+string ipaddress = Console.ReadLine();
+
+var client = new SocketClient(IPAddress.Parse(ipaddress), 11000); // Adjust port as necessary
 await client.ConnectAsync();
 
 Console.WriteLine("Enter commands (subscribe <RoomId>, unsubscribe <RoomId>, send <Message>, quit):");
+Console.ForegroundColor = ConsoleColor.DarkYellow;
+Console.BackgroundColor = ConsoleColor.Magenta;
 
 while (true)
 {
