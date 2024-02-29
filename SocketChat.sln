@@ -3,11 +3,13 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.9.34616.47
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SocketChat.Server", "SocketChat.Server\SocketChat.Server.csproj", "{CF59355E-187E-434E-92BA-F0FE4A78368B}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SocketChat.Server", "SocketChat.Server\SocketChat.Server.csproj", "{CF59355E-187E-434E-92BA-F0FE4A78368B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SocketChat.Common", "SocketChat.Common\SocketChat.Common.csproj", "{6AF00FCE-5296-4C5D-840C-6B6159B26BB0}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SocketChat.Common", "SocketChat.Common\SocketChat.Common.csproj", "{6AF00FCE-5296-4C5D-840C-6B6159B26BB0}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SocketChat.Client", "SocketChat.Client\SocketChat.Client.csproj", "{2E48DCB6-8797-43E6-9D4F-A20DA55FBFAF}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SocketChat.Client", "SocketChat.Client\SocketChat.Client.csproj", "{2E48DCB6-8797-43E6-9D4F-A20DA55FBFAF}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SocketChat.LoadTest", "SocketChat.LoadTest\SocketChat.LoadTest.csproj", "{2190AD8E-7D39-47E8-A0A9-7B5322883349}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -27,6 +29,10 @@ Global
 		{2E48DCB6-8797-43E6-9D4F-A20DA55FBFAF}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{2E48DCB6-8797-43E6-9D4F-A20DA55FBFAF}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{2E48DCB6-8797-43E6-9D4F-A20DA55FBFAF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2190AD8E-7D39-47E8-A0A9-7B5322883349}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2190AD8E-7D39-47E8-A0A9-7B5322883349}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2190AD8E-7D39-47E8-A0A9-7B5322883349}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2190AD8E-7D39-47E8-A0A9-7B5322883349}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

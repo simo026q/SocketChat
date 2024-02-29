@@ -49,8 +49,6 @@ internal class SocketConnection : IDisposable
         {
             // ignore
         }
-
-        Debug.WriteLine("test");
     }
 
     public async Task<bool> SendAsync(string message, CancellationToken cancellationToken = default)
