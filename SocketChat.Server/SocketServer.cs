@@ -12,7 +12,7 @@ internal class SocketServer
     private readonly ILogger<SocketServer> _logger;
     private readonly Socket _socket;
 
-    private readonly ConcurrentDictionary<string, List<string>> _subscribedConnections = new();
+    private readonly ConcurrentDictionary<string, HashSet<string>> _subscribedConnections = new();
     private readonly ConcurrentDictionary<string, SocketConnection> _connections = new();
 
     public SocketServer(ILogger<SocketServer> logger)
@@ -44,8 +44,6 @@ internal class SocketServer
             SocketConnection connection = new(handler, this, stoppingToken);
             _connections.TryAdd(connection.Id, connection);
             connection.StartReceiveLoop();
-
-            //ThreadPool.QueueUserWorkItem(async _ => await HandleConnection(connection, stoppingToken));
         }
     }
 
@@ -74,7 +72,7 @@ internal class SocketServer
         else if (message.StartsWith(SocketConstants.Unsubscribe))
         {
             var roomId = message.Replace(SocketConstants.Unsubscribe, "").Trim();
-            if (_subscribedConnections.TryGetValue(connection.Id, out List<string>? roomIds))
+            if (_subscribedConnections.TryGetValue(connection.Id, out HashSet<string>? roomIds))
             {
                 roomIds.Remove(roomId);
             }
@@ -98,7 +96,7 @@ internal class SocketServer
             foreach (var (connectionId, connection2) in _connections)
             {
                 if (connection != connection2
-                    && _subscribedConnections.TryGetValue(connectionId, out List<string>? subscribedRoomIds)
+                    && _subscribedConnections.TryGetValue(connectionId, out HashSet<string>? subscribedRoomIds)
                     && subscribedRoomIds.Contains(messageBody.RoomId))
                 {
                     bool succeeded = await connection2.SendAsync(message);
